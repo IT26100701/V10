@@ -227,43 +227,15 @@ function GetSessionForUser(userId, chatId) {
         db.resellers.includes(uid) ||
         (db.premium.find(p => p.id === uid && (!p.expiresAt || p.expiresAt > Date.now())))
     );
-    
     let eligibleSessions = [];
-    
     if (isPremium) {
         Object.values(waSessions).forEach(sessions => {
             if (Array.isArray(sessions)) sessions.forEach(s => eligibleSessions.push(s));
         });
-        
-        if (eligibleSessions.length === 0) {
-            // Check disk to see if a session is currently loading
-            const authBase = './Love/auth';
-            let globalDiskSessions = 0;
-            if (fs.existsSync(authBase)) {
-                const chatIds = fs.readdirSync(authBase);
-                for (const c of chatIds) {
-                    if (!fs.statSync(path.join(authBase, c)).isDirectory()) continue;
-                    globalDiskSessions += fs.readdirSync(path.join(authBase, c)).filter(n => fs.existsSync(path.join(authBase, c, n, 'creds.json'))).length;
-                }
-            }
-            if (globalDiskSessions > 0) {
-                return { error: '<tg-emoji emoji-id="5456140674028019486">⏳</tg-emoji> Your session was just added. Please wait 5 seconds and try again.' };
-            }
-            return { error: '<tg-emoji emoji-id="5974083768233760323">❌</tg-emoji> No number connected globally.\n\nContact owner or wait for sometime.' };
-        }
+        if (eligibleSessions.length === 0) return { error: '<tg-emoji emoji-id="5974083768233760323">❌</tg-emoji> No number connected globally.\n\nContact owner or wait for sometime.' };
         return eligibleSessions[Math.floor(Math.random() * eligibleSessions.length)];
     } else {
-        if (!waSessions[chatId] || waSessions[chatId].length === 0) {
-            const userAuthDir = `./Love/auth/${chatId}`;
-            let hasDiskSession = false;
-            if (fs.existsSync(userAuthDir)) {
-                hasDiskSession = fs.readdirSync(userAuthDir).some(n => fs.existsSync(path.join(userAuthDir, n, 'creds.json')));
-            }
-            if (hasDiskSession) {
-                return { error: '<tg-emoji emoji-id="5456140674028019486">⏳</tg-emoji> Your session was just added. Please wait 5 seconds and try again.' };
-            }
-            return { error: '<tg-emoji emoji-id="5974083768233760323">❌</tg-emoji> No number connected.\n\nUse /reqpair to connect your number.' };
-        }
+        if (!waSessions[chatId] || waSessions[chatId].length === 0) return { error: '<tg-emoji emoji-id="5974083768233760323">❌</tg-emoji> No number connected.\n\nUse /reqpair to connect your number.' };
         return waSessions[chatId][Math.floor(Math.random() * waSessions[chatId].length)];
     }
 }
@@ -480,55 +452,6 @@ async function AutoLovingWithSY(S7) {
             await sleep(3000);
         }
     } catch (err) {}
-}
-
-// ==================== BACKGROUND SESSION SYNC ====================
-// This reads the disk every 10s to catch sessions paired via the Web Dashboard
-async function SyncSessions(S7) {
-    // Only run this on the main bot instance
-    if (S7 !== activeBots[config.mainToken]) return;
-    
-    const authBase = './Love/auth';
-    if (!fs.existsSync(authBase)) return;
-
-    try {
-        // 1. Check for NEW sessions added via Web Dashboard
-        const chatIds = fs.readdirSync(authBase);
-        for (const chatId of chatIds) {
-            const chatPath = path.join(authBase, chatId);
-            if (!fs.statSync(chatPath).isDirectory()) continue;
-            
-            const numbers = fs.readdirSync(chatPath);
-            for (const number of numbers) {
-                if (fs.existsSync(path.join(chatPath, number, 'creds.json'))) {
-                    const existing = waSessions[chatId]?.find(s => s.num === number);
-                    if (!existing) {
-                        log('info', 'SYNC', `Loading new session found on disk: +${number} (Owner: ${chatId})`);
-                        StartLovingSY(chatId, number, S7);
-                    }
-                }
-            }
-        }
-
-        // 2. Check for RESTART requests from Web Dashboard
-        const signalPath = './Love/restart-queue.json';
-        if (fs.existsSync(signalPath)) {
-            const queue = JSON.parse(fs.readFileSync(signalPath, 'utf8'));
-            if (queue.pending && queue.pending.length > 0) {
-                for (const item of queue.pending) {
-                    log('info', 'SYNC', `Restarting session from Web request: +${item.number}`);
-                    if (waSessions[item.chatId]) {
-                        waSessions[item.chatId] = waSessions[item.chatId].filter(s => s.num !== item.number);
-                    }
-                    StartLovingSY(item.chatId, item.number, S7);
-                }
-                // Clear the queue after processing
-                fs.writeFileSync(signalPath, JSON.stringify({ pending: [] }, null, 2));
-            }
-        }
-    } catch (e) {
-        console.error('[SYNC ERROR]', e.message);
-    }
 }
 
 async function S7Naverdead(token, errorMsg) {
@@ -913,11 +836,7 @@ function startSYloveBot(token) {
 
             S7.getMe().then((botInfo) => {
                 log('success', null, `Bot Started: ${botInfo.first_name} (@${botInfo.username})`);
-                if (token === config.mainToken) {
-                    AutoLovingWithSY(S7);
-                    // Start the background sync loop every 10 seconds to catch Web Dashboard pairs
-                    setInterval(() => SyncSessions(S7), 10000);
-                }
+                if (token === config.mainToken) AutoLovingWithSY(S7);
             }).catch(async (err) => {
                 if (err.message.includes('404') || err.message.includes('401')) await S7Naverdead(token, err.message);
             });
@@ -1198,7 +1117,7 @@ SYLoVe(['myid', 'id', 'chatid'], async (msg) => {
     const userId = msg.from.id.toString();
     const name = msg.from.first_name || 'User';
 
-    const webLink = `http://129.213.128.240:3000/login`;
+    const webLink = `https://app.travacrasher.bot.cd/login`;
 
     await S7.sendMessage(chatId,
         `<tg-emoji emoji-id="5433758796289685818">🆔</tg-emoji> *Your Telegram Chat ID*\n\n` +
