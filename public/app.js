@@ -781,7 +781,7 @@ function navigateTo(page) {
 
     const titles = {
         dashboard: ['Dashboard', 'Overview & quick actions'],
-        attack: ['doom', 'Advanced kiss configuration'],
+        attack: ['WhatsApp', 'Advanced Bug Exploit'],
         pairing: ['My Pairings', 'Manage your WhatsApp sessions'],
         premium: ['Premium', 'Upgrade your account'],
         'admin-sessions': ['All Sessions', 'Manage all paired WhatsApp numbers'],
